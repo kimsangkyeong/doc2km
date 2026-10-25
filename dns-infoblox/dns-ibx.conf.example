@@ -1,0 +1,44 @@
+# ============================================================
+# Infoblox WAPI 접속 설정 (예시)
+#   cp dns-ibx.conf.example dns-ibx.conf  후 값을 채우세요.
+#   dns-ibx.conf 는 비밀번호를 담으므로 chmod 600 으로 보호하고
+#   절대 git 에 커밋하지 마세요 (.gitignore 등록 권장).
+# ============================================================
+
+# Grid Master (또는 WAPI 를 받는 멤버) 의 IP 또는 FQDN
+IBX_HOST="192.168.1.2"
+
+# WAPI 버전 (매뉴얼 기준 2.11)
+WAPI_VERSION="v2.11"
+
+# 인증 계정
+IBX_USER="admin"
+# 비밀번호 출처 우선순위 : 환경변수 IBX_PASS  >  이 파일의 IBX_PASS  >  암호화 저장소(secret-mgr.sh)
+#
+# (권장) 암호화 저장소 사용 : 평문 비밀번호를 어디에도 두지 않는다.
+#   1) 최초 1회 등록 :  bash secret-mgr.sh set dns-ibx      (비밀번호 + seed key 입력)
+#   2) 실행할 때    :  ./dns-ibx.sh verify -f dns.info      (seed key 만 입력하면 자동 복호화)
+# 저장소 위치는 환경변수 SECRET_STORE (기본 ~/.secret-store.enc), 아래 값은 필요할 때만 변경.
+#SECRET_TOOL="/opt/tools/secret-mgr.sh"   # 기본: dns-ibx.sh 와 같은 폴더의 secret-mgr.sh
+#SECRET_PROGRAM="dns-ibx"                 # 저장소에서 찾을 record 이름
+#
+# 평문으로 직접 두는 방식(비권장): 환경변수 IBX_PASS 또는 아래 줄. 파일에 둘 경우 chmod 600 필수.
+#IBX_PASS="changeme"
+
+# 기본 DNS view (비우면 기본 view 사용)
+DNS_VIEW=""
+
+# 조회 최대 건수 (regex 전체 조회 시 페이지 크기)
+MAX_RESULTS=1000
+
+# ---- TLS 검증 설정 ---------------------------------------------
+# 운영에서는 CA 서명 인증서를 신뢰하고 검증(verify)을 켜는 것을 강력 권장.
+#   VERIFY_TLS="true"  + CA_BUNDLE 지정  -> 정상 검증
+#   VERIFY_TLS="false"                   -> 검증 생략(-k). 테스트용에만 사용.
+VERIFY_TLS="true"
+# Grid 인증서를 검증할 CA 번들(PEM) 경로. VERIFY_TLS=true 일 때 사용.
+CA_BUNDLE="/etc/pki/infoblox/grid-ca.pem"
+
+# curl 연결/최대 타임아웃(초)
+CONNECT_TIMEOUT=10
+MAX_TIME=60

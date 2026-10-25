@@ -1,0 +1,19 @@
+# 비밀번호/호스트 등 민감정보가 담기는 실제 설정 파일은 커밋 금지
+dns-ibx.conf
+
+# 테스트/실행 중 생성되는 임시 산출물
+_mockbin/
+_lib_under_test.sh
+_mock_curl.log
+_out.txt
+_t.txt
+_test.conf
+_test.info
+
+# 암호화 비밀번호 저장소 및 백업/임시 파일 (저장소를 repo 안에 두는 경우 대비)
+.secret-store*
+*.enc
+*.enc.bak
+*.bak
+seed.txt
+_run_out.txt

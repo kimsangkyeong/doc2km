@@ -1,0 +1,23 @@
+# dns.info — DNS 레코드 작업/점검 공용 파일
+# ---------------------------------------------------------------------------
+# 형식: <insert|delete>  <arg1>  <arg2>  <A|PTR>
+#   A   : arg1=name(fqdn)   arg2=ipv4addr
+#   PTR : arg1=ipv4addr     arg2=ptrdname(fqdn)
+# '#' 주석과 빈 줄은 무시됩니다.
+#
+# 이 파일은 세 가지 용도로 '그대로' 재사용됩니다.
+#   1) 적용   : dns-ibx.sh -f dns.info            (각 줄의 action 을 실제 수행)
+#   2) 점검   : dns-ibx.sh verify -f dns.info      (현재 DNS 상태와 cross-check)
+#   3) 보완   : dns-ibx.sh verify -f dns.info --fix (어긋난 항목 재등록/재삭제)
+#
+# 점검(verify) 판정 기준 = 각 줄의 action 이 곧 '기대 상태':
+#   insert 줄 -> 레코드가 DNS 에 "있어야" 정상. 없으면 MISSING(누가 삭제함) → --fix 시 재등록
+#   delete 줄 -> 레코드가 DNS 에 "없어야" 정상. 있으면 STALE(삭제 누락)   → --fix 시 재삭제
+# ---------------------------------------------------------------------------
+
+insert  api-1.my.com    192.168.30.22   A
+insert  192.168.30.22   api-1.my.com    PTR
+
+# 삭제 예시 (필요 시 주석 해제)
+#delete  api-1.my.com    192.168.30.22   A
+#delete  192.168.30.22   api-1.my.com    PTR

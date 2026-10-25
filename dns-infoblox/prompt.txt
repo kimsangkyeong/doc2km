@@ -1,0 +1,84 @@
+dns-infoblox 주제 Q&A 로그 (누적)
+================================================================
+[2026-10-25 00:00]
+Q: 리눅스 bastion 서버에서 Infoblox WAPI(API)로 DNS A/PTR 레코드를 조회/등록/삭제하는
+   shell script 가 필요. DNS 프로그래밍 경험 없음. 사전 준비(방화벽/HTTPS 인증서 등) 정리와
+   파일(dns.info) 일괄 처리 + 파라미터 단건 처리 + 정규식(*.my.com, 192.168.*) 목록 조회 포함.
+   cross check 로 실제 수행 가능 품질로.
+A(요약):
+   - WAPI = Infoblox REST API. 엔드포인트 https://<GRID>/wapi/v2.11/<objtype>.
+     A=record:a(name,ipv4addr), PTR=record:ptr(ptrdname,ipv4addr). 검색 ~= 가 정규식.
+     삭제/수정은 GET 으로 _ref 조회 후 DELETE/PUT (2단계).
+   - 산출물: dns-ibx.sh(조회 list/search, 등록·삭제 insert/delete, 파일 -f, 파라미터, --dry-run),
+     dns-ibx.conf.example, dns.info(예시), _test_dns-ibx.sh(모의 테스트 21/21 통과).
+   - 사전 준비: [DNS측] WAPI 전용계정·소스IP제한, 정/역 zone 존재, CA서명 인증서.
+     [Bastion측] curl/jq/bash4+, 443 outbound 방화벽, CA 번들(--cacert), IBX_PASS 환경변수+chmod600.
+   - 품질: 문서(PDF)↔공식문서↔커뮤니티 교차검증, bash -n 통과, 모의 단위테스트 21건 통과,
+     dry-run 동작 확인(잘못된 IP 거부 포함). 실 Grid end-to-end 는 미수행(테스트 zone 권장).
+출처: Infoblox WAPI 2.11 Documentation.pdf (p.157~166, record:a/record:ptr 정의);
+      공식 record.a.html / record.ptr.html / sample.html; rainingforks curl 예제.
+상세: bastion-dns-record-management.md
+================================================================
+
+================================================================
+[2026-10-25 00:30]
+Q: insert/delete 에 썼던 동일 info 파일로 실제 DNS 서버에 반영됐는지 점검하는 기능 추가.
+   (누가 삭제했을 경우 등록정보를 cross-check 해서 보완). 가능하면 info 파일 포맷은 유지하되
+   필요하면 같이 검토해 수정. template.sh 표준 포맷으로 refactoring. author = k.s.k & kiro.
+A(요약):
+   - verify 서브커맨드 추가: 같은 dns.info 재사용. 각 줄 action 이 '기대상태'.
+     insert 줄=레코드 있어야 정상(없으면 MISSING, 누가 삭제), delete 줄=없어야 정상(있으면 STALE).
+   - --fix 옵션: MISSING 재등록 / STALE 재삭제. --dry-run 과 조합해 계획만 미리보기 가능.
+   - info 파일 포맷 검토 결과: 변경 불필요(action 이 곧 기대상태). 주석 설명만 보강, 포맷 유지.
+   - template.sh 포맷으로 전면 리팩토링: 헤더/버전표(author k.s.k & kiro)/섹션 마커
+     (Signal, Global Var, Function, Main)/함수별 주석블록, 시그널 trap 추가.
+     parse_info_line/record_exists/verify_line/verify_file/ref_a/ref_ptr 함수 분리.
+   - 품질: bash -n 통과, 단위테스트 48/48 통과, verify e2e dry-run 으로 OK/MISSING/STALE +
+     --fix 재등록/재삭제 계획 동작 확인. (실 Grid 연동은 여전히 미수행 → 테스트 zone 권장)
+출처: Infoblox WAPI 2.11 Documentation.pdf (record:a/record:ptr, _ref 2단계 삭제, ~= 검색);
+      template.sh (사내 shell 표준 포맷).
+상세: bastion-dns-record-management.md (6.0 포맷검토, 6.3 verify 섹션)
+================================================================
+
+================================================================
+[2026-10-25 01:00]
+Q: IBX_PASS 를 오픈소스 양방향(대칭) 암호화 도구로 암호화해 쓰고 싶다. 암·복호화 시 seed key
+   string 을 입력받는 방식. Linux/Windows 기준 안정성·범용성 비교, 사용 예시, 버전 업그레이드
+   대응, 알고리즘 AES256 이상 조건. 결과는 홈 디렉토리에 별도 md 로.
+A(요약):
+   - 도구 3종 비교: OpenSSL enc / GnuPG(-c) / age.
+     * OpenSSL: -aes-256-cbc(또는 -gcm) + -pbkdf2 -iter. seed key 는 -pass pass:/env:/stdin.
+       AES256 명시 충족, 스크립트 연동 1순위. (본 환경 OpenSSL 3.2.3 로 암·복호화 왕복 검증, 오답키 거부 확인)
+     * GnuPG: -c --cipher-algo AES256. OpenPGP 표준, 장기호환·무결성 기본. 파일보관 2순위.
+     * age: ChaCha20-Poly1305(256-bit) + scrypt. AES 미지원 -> 'AES256 명시' 요건엔 부적합, 보조 참고.
+   - 버전 대응: OpenSSL 1.1.0 KDF 기본 MD5->SHA256 변경 -> -pbkdf2 -iter 명시로 회피.
+     GnuPG 기본 cipher 변동 -> --cipher-algo 명시. major 업그레이드 시 복호화->재암호화 rotate.
+   - 수칙: 평문/seed 를 인자·히스토리·로그에 남기지 말 것(env/stdin/대화형), 암호문 chmod600 + .gitignore.
+   - 산출물: ~/ibx-pass-encryption-tools.md (홈 디렉토리).
+출처: OpenSSL enc 매뉴얼(3.x), GnuPG 매뉴얼, FiloSottile/age(README, #368), 버전호환 관련 Q&A;
+      본 환경 OpenSSL 3.2.3 실측.
+상세: C:\Users\user\ibx-pass-encryption-tools.md
+================================================================
+
+================================================================
+[2026-10-26 00:50]
+Q: openssl enc 로 암호문을 만들어 IBX_PASS 를 주입하고 싶다. 비밀번호를 쓰는 프로그램이 여럿이라
+   파일 1개에 프로그램명과 함께 record 형식으로 관리하고 프로그램별 등록/참조가 되게 별도 shell
+   script 로 작성, dns-ibx.sh 연동 예시 포함, 동작 cross-check.
+A(요약):
+   - secret-mgr.sh 신규(template.sh 형식, author k.s.k & kiro): set/get/check/list/delete/rekey.
+     저장소 1파일, 한 줄=한 프로그램 'program|updated|cipher:kdf:iter|base64'. 레코드별 독립 암호화
+     (AES-256-CBC + PBKDF2-SHA256 600000회), seed 는 숨김 프롬프트(또는 seed 파일/환경변수).
+   - 메타를 레코드에 기록 -> openssl/기본값 업그레이드 후에도 복호화, rekey --keep-seed 로 최신화.
+   - dns-ibx.sh v1.2: IBX_PASS 가 비면 secret-mgr.sh get <SECRET_PROGRAM> 자동 호출
+     (우선순위 env > conf > 저장소). 복호화 실패 시 curl 호출 없이 중단.
+   - 실측으로 정정: openssl enc 는 AEAD(GCM) 미지원 -> 이전 조사문서(ibx-pass-encryption-tools.md)의
+     GCM 서술을 CBC 로 수정. CBC 무결성 부재는 평문 앞 SS1: 마커 검증으로 보완.
+   - 품질: 문법검사 통과, 신규 테스트 92/92(실제 openssl 3.2.3 + curl mock), 기존 48/48 회귀 통과.
+     일반 openssl 명령으로 수동 복구 가능함도 확인. 실제 Linux bastion 실행은 미검증(openssl>=1.1.1 필요,
+     CentOS7=1.0.2k 는 미지원 -> preflight 가 안내 후 중단).
+   - 한계: 무인 실행용 seed 파일은 난독화 수준(Vault/KMS 권장), 동시 수정 잠금 없음, NTFS 는 chmod 무효.
+출처: OpenSSL enc 실측(3.2.3), openssl enc -pbkdf2 1.1.1 요구사항 관련 StackOverflow/SuperUser 자료,
+      OWASP PBKDF2 반복 권고치, 이전 조사문서.
+상세: secret-mgr-guide.md
+================================================================
